@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>J.A.R.V.I.S.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#04070a;
+    --bg2:#060b10;
+    --cyan:#3ee8ff;
+    --cyan-dim:#1c7d94;
+    --cyan-glow:rgba(62,232,255,0.55);
+    --amber:#ffb454;
+    --red:#ff4d5e;
+    --text:#d9f4ff;
+    --text-dim:#6f95a3;
+    --panel-border:rgba(62,232,255,0.25);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{
+    height:100%;
+    background:
+      radial-gradient(ellipse at 50% 20%, rgba(20,60,75,0.35), transparent 60%),
+      radial-gradient(ellipse at 50% 100%, rgba(10,40,55,0.25), transparent 60%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Rajdhani', sans-serif;
+    overflow:hidden;
+  }
+  .scanlines{
+    position:fixed; inset:0; pointer-events:none; z-index:50;
+    background:repeating-linear-gradient(0deg, rgba(62,232,255,0.025) 0px, rgba(62,232,255,0.025) 1px, transparent 1px, transparent 3px);
+    mix-blend-mode:screen;
+  }
+  .vignette{
+    position:fixed; inset:0; pointer-events:none; z-index:49;
+    box-shadow: inset 0 0 200px rgba(0,0,0,0.85);
+  }
+  .noise-flicker{
+    position:fixed; inset:0; pointer-events:none; z-index:48;
+    background:rgba(62,232,255,0.015);
+    animation:flicker 6s infinite;
+  }
+  @keyframes flicker{
+    0%,93%,100%{opacity:0;}
+    94%{opacity:1;}
+    95%{opacity:0;}
+    96%{opacity:0.6;}
+    97%{opacity:0;}
+  }
+
+  .app{
+    position:relative;
+    width:100vw; height:100vh;
+    display:grid;
+    grid-template-columns: 300px 1fr 300px;
+    grid-template-rows: 90px 1fr 130px;
+    gap:16px;
+    padding:20px 26px 24px;
+  }
+
+  /* ===== HEADER ===== */
+  .header{
+    grid-column: 1 / 4;
+    display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--panel-border);
+    padding-bottom:12px;
+  }
+  .brand{
+    display:flex; align-items:center; gap:14px;
+  }
+  .brand-dot{
+    width:10px; height:10px; border-radius:50%;
+    background:var(--cyan);
+    box-shadow:0 0 10px var(--cyan), 0 0 20px var(--cyan-glow);
+    animation:pulse-dot 2s ease-in-out infinite;
+  }
+  @keyframes pulse-dot{ 50%{opacity:0.35; transform:scale(0.8);} }
+  .brand-title{
+    font-family:'Orbitron', sans-serif;
+    font-weight:900;
+    font-size:22px;
+    letter-spacing:6px;
+    color:var(--text);
+    text-shadow:0 0 12px var(--cyan-glow);
+  }
+  .brand-sub{
+    font-size:11px;
+    letter-spacing:3px;
+    color:var(--text-dim);
+    margin-top:2px;
+  }
+  .header-right{
+    display:flex; gap:26px; align-items:center;
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    color:var(--cyan-dim);
+    letter-spacing:1px;
+  }
+  .header-right .clock{
+    color:var(--cyan);
+    font-size:15px;
+    letter-spacing:2px;
+  }
+  .header-right .stat-label{color:var(--text-dim); font-size:9px; letter-spacing:2px;}
+
+  /* ===== SIDE PANELS ===== */
+  .panel{
+    border:1px solid var(--panel-border);
+    background:linear-gradient(180deg, rgba(62,232,255,0.05), rgba(62,232,255,0.01));
+    position:relative;
+    padding:14px 16px;
+    overflow:hidden;
+    clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+  }
+  .panel::before{
+    content:'';
+    position:absolute; inset:0;
+    border:1px solid transparent;
+    background:linear-gradient(120deg, var(--cyan-dim), transparent 30%) border-box;
+    -webkit-mask:linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity:0.5;
+    pointer-events:none;
+  }
+  .panel-title{
+    font-family:'Orbitron', sans-serif;
+    font-size:11px;
+    letter-spacing:3px;
+    color:var(--cyan);
+    margin-bottom:12px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .panel-title::before{
+    content:'';
+    width:6px; height:6px;
+    background:var(--cyan);
+    box-shadow:0 0 6px var(--cyan);
+  }
+
+  .left-panel{ grid-column:1; grid-row:2; display:flex; flex-direction:column; gap:14px; }
+  .right-panel{ grid-column:3; grid-row:2; display:flex; flex-direction:column; gap:14px; }
+
+  /* system metrics */
+  .metric{ margin-bottom:14px; }
+  .metric-row{ display:flex; justify-content:space-between; font-size:11px; color:var(--text-dim); font-family:'JetBrains Mono',monospace; margin-bottom:5px;}
+  .metric-row span:last-child{ color:var(--cyan); }
+  .bar{ height:4px; background:rgba(62,232,255,0.1); position:relative; overflow:hidden;}
+  .bar-fill{ height:100%; background:linear-gradient(90deg, var(--cyan-dim), var(--cyan)); box-shadow:0 0 6px var(--cyan-glow); transition:width 0.6s ease;}
+
+  .subsystems{ list-style:none; font-family:'JetBrains Mono',monospace; font-size:11px; }
+  .subsystems li{ display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px dashed rgba(62,232,255,0.12); color:var(--text-dim);}
+  .subsystems li .ok{ color:var(--cyan); }
+  .subsystems li .warn{ color:var(--amber); }
+
+  .waveform-mini{ width:100%; height:60px; }
+
+  /* ===== CENTER CORE ===== */
+  .core-wrap{
+    grid-column:2; grid-row:2;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    position:relative;
+  }
+  .core-stage{
+    position:relative;
+    width:min(46vh, 420px);
+    height:min(46vh, 420px);
+  }
+  svg.rings{ position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
+  .ring{ fill:none; stroke:var(--cyan-dim); opacity:0.55; }
+  .ring-bright{ stroke:var(--cyan); filter:drop-shadow(0 0 6px var(--cyan-glow)); }
+  .spin-slow{ animation:spin 40s linear infinite; transform-origin:50% 50%; }
+  .spin-slow-rev{ animation:spin 55s linear infinite reverse; transform-origin:50% 50%; }
+  .spin-fast{ animation:spin 14s linear infinite; transform-origin:50% 50%; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .core-center{
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:34%; height:34%;
+    border-radius:50%;
+    background:radial-gradient(circle at 50% 45%, #bdf5ff 0%, var(--cyan) 28%, #0a4a5a 72%, transparent 100%);
+    box-shadow:0 0 40px 10px var(--cyan-glow), 0 0 90px 30px rgba(62,232,255,0.25);
+    animation:breathe 3.2s ease-in-out infinite;
+  }
+  @keyframes breathe{ 0%,100%{ transform:translate(-50%,-50%) scale(1); } 50%{ transform:translate(-50%,-50%) scale(1.06); } }
+
+  .core-stage.listening .core-center{ animation:breathe 0.9s ease-in-out infinite; box-shadow:0 0 55px 16px rgba(255,180,84,0.55), 0 0 110px 34px rgba(255,180,84,0.22); background:radial-gradient(circle at 50% 45%, #fff2d8 0%, var(--amber) 28%, #6a3e0a 72%, transparent 100%);}
+  .core-stage.listening .ring-bright{ stroke:var(--amber); filter:drop-shadow(0 0 8px rgba(255,180,84,0.6)); }
+  .core-stage.speaking .core-center{ animation:breathe 0.5s ease-in-out infinite; }
+  .core-stage.thinking .spin-fast{ animation-duration:3s; }
+
+  canvas#voiceCanvas{
+    position:absolute; inset:0; width:100%; height:100%;
+  }
+
+  .status-text{
+    margin-top:22px;
+    font-family:'Orbitron', sans-serif;
+    letter-spacing:5px;
+    font-size:13px;
+    color:var(--cyan);
+    text-shadow:0 0 10px var(--cyan-glow);
+    min-height:20px;
+  }
+  .status-sub{
+    margin-top:6px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    color:var(--text-dim);
+    letter-spacing:1px;
+  }
+
+  .mic-btn{
+    margin-top:26px;
+    width:64px; height:64px;
+    border-radius:50%;
+    background:rgba(62,232,255,0.06);
+    border:1px solid var(--cyan-dim);
+    color:var(--cyan);
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:all 0.25s ease;
+    position:relative;
+  }
+  .mic-btn:hover{ background:rgba(62,232,255,0.14); box-shadow:0 0 20px rgba(62,232,255,0.3); }
+  .mic-btn.active{
+    background:rgba(255,180,84,0.14);
+    border-color:var(--amber);
+    color:var(--amber);
+    box-shadow:0 0 30px rgba(255,180,84,0.4);
+  }
+  .mic-btn svg{ width:26px; height:26px; }
+  .mic-ring{
+    position:absolute; inset:-8px; border-radius:50%;
+    border:1px solid var(--amber); opacity:0;
+  }
+  .mic-btn.active .mic-ring{ animation:mic-pulse 1.4s ease-out infinite; }
+  @keyframes mic-pulse{ 0%{ opacity:0.7; transform:scale(1);} 100%{ opacity:0; transform:scale(1.5);} }
+
+  /* ===== FOOTER / CONSOLE + INPUT ===== */
+  .console-wrap{
+    grid-column:1 / 4; grid-row:3;
+    display:flex; gap:16px;
+  }
+  .console{
+    flex:1;
+    border:1px solid var(--panel-border);
+    background:rgba(62,232,255,0.03);
+    padding:10px 16px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    overflow-y:auto;
+    display:flex; flex-direction:column; gap:5px;
+  }
+  .console::-webkit-scrollbar{ width:6px; }
+  .console::-webkit-scrollbar-thumb{ background:var(--cyan-dim); }
+  .log-line{ display:flex; gap:10px; opacity:0; animation:fade-in 0.4s ease forwards; }
+  @keyframes fade-in{ to{ opacity:1; } }
+  .log-tag{ color:var(--text-dim); flex-shrink:0; }
+  .log-tag.user{ color:var(--amber); }
+  .log-tag.jarvis{ color:var(--cyan); }
+  .log-tag.sys{ color:var(--text-dim); }
+  .log-text{ color:var(--text); }
+
+  .input-row{
+    display:flex; align-items:center; gap:10px;
+    width:340px;
+  }
+  .text-input{
+    flex:1;
+    background:rgba(62,232,255,0.05);
+    border:1px solid var(--panel-border);
+    color:var(--text);
+    font-family:'Rajdhani', sans-serif;
+    font-size:14px;
+    padding:12px 14px;
+    outline:none;
+  }
+  .text-input:focus{ border-color:var(--cyan); box-shadow:0 0 10px rgba(62,232,255,0.2); }
+  .send-btn{
+    background:rgba(62,232,255,0.1);
+    border:1px solid var(--cyan-dim);
+    color:var(--cyan);
+    padding:12px 16px;
+    cursor:pointer;
+    font-family:'Orbitron',sans-serif;
+    font-size:11px;
+    letter-spacing:2px;
+  }
+  .send-btn:hover{ background:rgba(62,232,255,0.2); }
+
+  .corner{
+    position:fixed; width:22px; height:22px; border-color:var(--cyan-dim); opacity:0.7; pointer-events:none; z-index:5;
+  }
+  .corner.tl{ top:12px; left:12px; border-top:2px solid; border-left:2px solid; }
+  .corner.tr{ top:12px; right:12px; border-top:2px solid; border-right:2px solid; }
+  .corner.bl{ bottom:12px; left:12px; border-bottom:2px solid; border-left:2px solid; }
+  .corner.br{ bottom:12px; right:12px; border-bottom:2px solid; border-right:2px solid; }
+
+  /* ===== ACTIVATION OVERLAY ===== */
+  .boot-overlay{
+    position:fixed; inset:0; z-index:100;
+    background:radial-gradient(ellipse at 50% 50%, rgba(20,60,75,0.4), var(--bg) 70%);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:22px;
+    text-align:center;
+  }
+  .boot-overlay.hidden{ display:none; }
+  .boot-ring{
+    width:120px; height:120px; border-radius:50%;
+    border:2px solid var(--cyan-dim);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 0 30px rgba(62,232,255,0.15);
+  }
+  .boot-ring::before{
+    content:''; width:70%; height:70%; border-radius:50%;
+    background:radial-gradient(circle at 50% 45%, #bdf5ff 0%, var(--cyan) 30%, #0a4a5a 75%, transparent 100%);
+    animation:breathe 2.4s ease-in-out infinite;
+  }
+  .boot-title{
+    font-family:'Orbitron', sans-serif; font-weight:900; letter-spacing:6px;
+    font-size:20px; color:var(--text); text-shadow:0 0 12px var(--cyan-glow);
+  }
+  .boot-btn{
+    padding:14px 30px;
+    background:rgba(62,232,255,0.08);
+    border:1px solid var(--cyan);
+    color:var(--cyan);
+    font-family:'Orbitron', sans-serif;
+    font-size:12px; letter-spacing:3px;
+    cursor:pointer;
+    transition:all 0.2s ease;
+  }
+  .boot-btn:hover{ background:rgba(62,232,255,0.2); box-shadow:0 0 24px rgba(62,232,255,0.35); }
+  .boot-note{
+    font-family:'JetBrains Mono', monospace; font-size:11px; color:var(--text-dim);
+    max-width:360px; line-height:1.6;
+  }
+  .boot-note.err{ color:var(--red); }
+
+  .error-banner{
+    position:fixed; top:16px; left:50%; transform:translateX(-50%);
+    z-index:90;
+    background:rgba(255,77,94,0.12);
+    border:1px solid var(--red);
+    color:var(--red);
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    padding:8px 16px;
+    display:none;
+    max-width:70vw;
+  }
+  .error-banner.show{ display:block; }
+
+  @media (max-width: 980px){
+    .app{ grid-template-columns:1fr; grid-template-rows:auto auto auto auto; }
+    .left-panel, .right-panel{ grid-column:1; }
+    .console-wrap{ flex-direction:column; }
+    .input-row{ width:100%; }
+  }
+</style>
+</head>
+<body>
+
+<div class="scanlines"></div>
+<div class="vignette"></div>
+<div class="noise-flicker"></div>
+<div class="corner tl"></div>
+<div class="corner tr"></div>
+<div class="corner bl"></div>
+<div class="corner br"></div>
+
+<div class="error-banner" id="errorBanner"></div>
+
+<div class="boot-overlay" id="bootOverlay">
+  <div class="boot-ring"></div>
+  <div class="boot-title">J.A.R.V.I.S.</div>
+  <button class="boot-btn" id="bootBtn">INITIALIZE SYSTEM</button>
+  <div class="boot-note" id="bootNote">Requires microphone access and a Chromium-based browser (Chrome / Edge) for voice recognition. Click to grant permissions and power on.</div>
+</div>
+
+<div class="app">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="brand">
+      <div class="brand-dot"></div>
+      <div>
+        <div class="brand-title">J.A.R.V.I.S.</div>
+        <div class="brand-sub">JUST A RATHER VERY INTELLIGENT SYSTEM</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div>
+        <div class="stat-label">LOCAL TIME</div>
+        <div class="clock" id="clock">00:00:00</div>
+      </div>
+      <div>
+        <div class="stat-label">STATUS</div>
+        <div id="headerStatus">ONLINE</div>
+      </div>
+      <div>
+        <div class="stat-label">DATE</div>
+        <div id="dateDisplay">--</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEFT PANEL -->
+  <div class="left-panel">
+    <div class="panel">
+      <div class="panel-title">SYSTEM LOAD</div>
+      <div class="metric">
+        <div class="metric-row"><span>NEURAL CORE</span><span id="m1v">--</span></div>
+        <div class="bar"><div class="bar-fill" id="m1" style="width:0%"></div></div>
+      </div>
+      <div class="metric">
+        <div class="metric-row"><span>AUDIO I/O</span><span id="m2v">--</span></div>
+        <div class="bar"><div class="bar-fill" id="m2" style="width:0%"></div></div>
+      </div>
+      <div class="metric">
+        <div class="metric-row"><span>LINK LATENCY</span><span id="m3v">--</span></div>
+        <div class="bar"><div class="bar-fill" id="m3" style="width:0%"></div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">SUBSYSTEMS</div>
+      <ul class="subsystems" id="subsysList">
+        <li><span>Speech Recognition</span><span class="warn" id="s-stt">CHECKING</span></li>
+        <li><span>Speech Synthesis</span><span class="warn" id="s-tts">CHECKING</span></li>
+        <li><span>Reasoning Engine</span><span class="ok">READY</span></li>
+        <li><span>Microphone</span><span class="warn" id="s-mic">STANDBY</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- CENTER CORE -->
+  <div class="core-wrap">
+    <div class="core-stage" id="coreStage">
+      <canvas id="voiceCanvas"></canvas>
+      <svg class="rings" viewBox="0 0 400 400">
+        <g class="spin-slow">
+          <circle class="ring" cx="200" cy="200" r="180" stroke-width="1" stroke-dasharray="2 6"/>
+        </g>
+        <g class="spin-slow-rev">
+          <circle class="ring ring-bright" cx="200" cy="200" r="150" stroke-width="1.5" stroke-dasharray="40 8 4 8"/>
+        </g>
+        <g class="spin-fast">
+          <circle class="ring" cx="200" cy="200" r="120" stroke-width="1" stroke-dasharray="1 4"/>
+        </g>
+        <circle class="ring ring-bright" cx="200" cy="200" r="95" stroke-width="1"/>
+      </svg>
+      <div class="core-center" id="coreCenter"></div>
+    </div>
+    <div class="status-text" id="statusText">SYSTEMS NOMINAL</div>
+    <div class="status-sub" id="statusSub">Tap the mic or type a command below</div>
+
+    <button class="mic-btn" id="micBtn" title="Hold to talk">
+      <div class="mic-ring"></div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+        <line x1="12" y1="19" x2="12" y2="23"/>
+        <line x1="8" y1="23" x2="16" y2="23"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <div class="panel">
+      <div class="panel-title">VOICE INPUT</div>
+      <canvas class="waveform-mini" id="miniWave"></canvas>
+    </div>
+    <div class="panel" style="flex:1;">
+      <div class="panel-title">SESSION LOG</div>
+      <ul class="subsystems" id="sessionLog">
+        <li><span>Boot sequence</span><span class="ok">COMPLETE</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- CONSOLE + INPUT -->
+  <div class="console-wrap">
+    <div class="console" id="console"></div>
+    <div class="input-row">
+      <input type="text" class="text-input" id="textInput" placeholder="Type a command, Sir...">
+      <button class="send-btn" id="sendBtn">SEND</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ============================================================
+   J.A.R.V.I.S. — Iron Man style AI assistant interface
+   Voice recognition (Web Speech API) + Voice synthesis +
+   Claude-powered reasoning via the Anthropic API.
+============================================================ */
+
+function showError(msg){
+  const banner = document.getElementById('errorBanner');
+  banner.textContent = '⚠ ' + msg;
+  banner.classList.add('show');
+  clearTimeout(showError._t);
+  showError._t = setTimeout(()=> banner.classList.remove('show'), 7000);
+}
+
+if (location.protocol === 'file:'){
+  const note = document.getElementById('bootNote');
+  note.textContent = 'This page was opened as a local file. Microphone access is blocked outside a secure (https/localhost) context in most browsers — voice input will likely fail. Typed commands will still work. For full voice support, open this file through a local web server or host it online.';
+  note.classList.add('err');
+}
+
+const els = {
+  clock: document.getElementById('clock'),
+  date: document.getElementById('dateDisplay'),
+  headerStatus: document.getElementById('headerStatus'),
+  statusText: document.getElementById('statusText'),
+  statusSub: document.getElementById('statusSub'),
+  coreStage: document.getElementById('coreStage'),
+  micBtn: document.getElementById('micBtn'),
+  console: document.getElementById('console'),
+  textInput: document.getElementById('textInput'),
+  sendBtn: document.getElementById('sendBtn'),
+  sSTT: document.getElementById('s-stt'),
+  sTTS: document.getElementById('s-tts'),
+  sMic: document.getElementById('s-mic'),
+  sessionLog: document.getElementById('sessionLog'),
+  m1: document.getElementById('m1'), m1v: document.getElementById('m1v'),
+  m2: document.getElementById('m2'), m2v: document.getElementById('m2v'),
+  m3: document.getElementById('m3'), m3v: document.getElementById('m3v'),
+};
+
+/* ---------- Clock ---------- */
+function tickClock(){
+  const now = new Date();
+  els.clock.textContent = now.toLocaleTimeString('en-GB');
+  els.date.textContent = now.toLocaleDateString('en-US',{ month:'short', day:'2-digit', year:'numeric'});
+}
+setInterval(tickClock, 1000); tickClock();
+
+/* ---------- Fake system telemetry (ambient HUD feel) ---------- */
+function jitterMetrics(){
+  const load = 18 + Math.random()*14;
+  const audio = state.listening ? 60 + Math.random()*35 : 4 + Math.random()*10;
+  const latency = 8 + Math.random()*20;
+  els.m1.style.width = load+'%'; els.m1v.textContent = Math.round(load)+'%';
+  els.m2.style.width = audio+'%'; els.m2v.textContent = Math.round(audio)+'%';
+  els.m3.style.width = Math.min(100, latency*3)+'%'; els.m3v.textContent = Math.round(latency)+'ms';
+}
+setInterval(jitterMetrics, 900);
+
+/* ---------- Console logging ---------- */
+function log(tag, text){
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  const cls = tag === 'YOU' ? 'user' : (tag === 'JARVIS' ? 'jarvis' : 'sys');
+  line.innerHTML = `<span class="log-tag ${cls}">[${tag}]</span><span class="log-text"></span>`;
+  line.querySelector('.log-text').textContent = text;
+  els.console.appendChild(line);
+  els.console.scrollTop = els.console.scrollHeight;
+}
+function sessionNote(label, status, cls){
+  const li = document.createElement('li');
+  li.innerHTML = `<span>${label}</span><span class="${cls}">${status}</span>`;
+  els.sessionLog.appendChild(li);
+  els.sessionLog.scrollTop = els.sessionLog.scrollHeight;
+}
+
+/* ---------- State machine ---------- */
+const state = { mode:'idle', listening:false, speaking:false, thinking:false };
+function setMode(mode){
+  state.mode = mode;
+  els.coreStage.classList.remove('listening','thinking','speaking');
+  if (mode !== 'idle') els.coreStage.classList.add(mode);
+  const map = {
+    idle:      ['SYSTEMS NOMINAL', 'Tap the mic or type a command below'],
+    listening: ['LISTENING', 'Speak now...'],
+    thinking:  ['PROCESSING', 'Analyzing request...'],
+    speaking:  ['RESPONDING', 'Jarvis is speaking'],
+  };
+  els.statusText.textContent = map[mode][0];
+  els.statusSub.textContent = map[mode][1];
+  els.headerStatus.textContent = mode === 'idle' ? 'ONLINE' : map[mode][0];
+}
+
+/* ---------- Speech Synthesis (voice OUT) ---------- */
+let voicesReady = false;
+let chosenVoice = null;
+function loadVoices(){
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length){
+    voicesReady = true;
+    chosenVoice = voices.find(v => /male|daniel|google uk english male|arthur/i.test(v.name))
+               || voices.find(v => /en-GB/i.test(v.lang))
+               || voices[0];
+    els.sTTS.textContent = 'READY'; els.sTTS.className = 'ok';
+  }
+}
+if ('speechSynthesis' in window){
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+} else {
+  els.sTTS.textContent = 'UNAVAILABLE'; els.sTTS.className = 'warn';
+}
+
+function speak(text){
+  return new Promise((resolve) => {
+    if (!('speechSynthesis' in window)) { resolve(); return; }
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    if (chosenVoice) utter.voice = chosenVoice;
+    utter.pitch = 0.85;
+    utter.rate = 1.02;
+    utter.volume = 1;
+    utter.onstart = () => setMode('speaking');
+    utter.onend = () => { setMode('idle'); resolve(); };
+    utter.onerror = () => { setMode('idle'); resolve(); };
+    window.speechSynthesis.speak(utter);
+  });
+}
+
+/* ---------- Speech Recognition (voice IN) ---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+if (SR){
+  recognition = new SR();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.lang = 'en-US';
+  els.sSTT.textContent = 'READY'; els.sSTT.className = 'ok';
+
+  recognition.onstart = () => {
+    state.listening = true;
+    els.micBtn.classList.add('active');
+    setMode('listening');
+  };
+  recognition.onend = () => {
+    state.listening = false;
+    els.micBtn.classList.remove('active');
+    if (state.mode === 'listening') setMode('idle');
+  };
+  recognition.onerror = (e) => {
+    log('SYS', 'Speech recognition error: ' + e.error);
+    state.listening = false;
+    els.micBtn.classList.remove('active');
+    setMode('idle');
+  };
+  recognition.onresult = (e) => {
+    const transcript = e.results[0][0].transcript;
+    log('YOU', transcript);
+    sessionNote('Voice command received', 'LOGGED', 'ok');
+    handleUserInput(transcript);
+  };
+} else {
+  els.sSTT.textContent = 'UNAVAILABLE'; els.sSTT.className = 'warn';
+}
+
+els.micBtn.addEventListener('click', () => {
+  if (!recognition){
+    log('SYS', 'Speech recognition is not supported in this browser. Try Chrome or Edge, or type a command instead.');
+    showError('Speech recognition (SpeechRecognition API) is not available in this browser. Use Chrome or Edge, or type your command below.');
+    return;
+  }
+  if (state.listening){
+    recognition.stop();
+  } else {
+    window.speechSynthesis.cancel();
+    try {
+      recognition.start();
+    } catch(e){
+      log('SYS', 'Could not start listening: ' + e.message);
+    }
+  }
+});
+
+/* ---------- Microphone audio visualizer (Web Audio API) ---------- */
+const canvas = document.getElementById('voiceCanvas');
+const miniCanvas = document.getElementById('miniWave');
+const ctx = canvas.getContext('2d');
+const miniCtx = miniCanvas.getContext('2d');
+let audioCtx, analyser, dataArray, micSource, micStream;
+
+function resizeCanvases(){
+  [canvas, miniCanvas].forEach(c => {
+    const rect = c.getBoundingClientRect();
+    c.width = rect.width * devicePixelRatio;
+    c.height = rect.height * devicePixelRatio;
+  });
+}
+window.addEventListener('resize', resizeCanvases);
+setTimeout(resizeCanvases, 50);
+
+async function initMic(){
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    els.sMic.textContent = 'UNSUPPORTED'; els.sMic.className = 'warn';
+    sessionNote('Microphone access', 'UNSUPPORTED', 'warn');
+    showError('This browser does not support microphone access (getUserMedia). Try Chrome or Edge.');
+    drawIdleLoop();
+    return;
+  }
+  try{
+    micStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+    micSource = audioCtx.createMediaStreamSource(micStream);
+    micSource.connect(analyser);
+    els.sMic.textContent = 'ONLINE'; els.sMic.className = 'ok';
+    sessionNote('Microphone access', 'GRANTED', 'ok');
+    drawLoop();
+  } catch(err){
+    els.sMic.textContent = 'DENIED'; els.sMic.className = 'warn';
+    sessionNote('Microphone access', 'DENIED', 'warn');
+    if (err && err.name === 'NotAllowedError'){
+      showError('Microphone permission denied. Click the lock/site-info icon in the address bar and allow microphone access, then reload.');
+    } else if (err && err.name === 'NotFoundError'){
+      showError('No microphone was found on this device.');
+    } else {
+      showError('Could not access the microphone: ' + (err && err.message ? err.message : err));
+    }
+    drawIdleLoop();
+  }
+}
+
+function drawLoop(){
+  requestAnimationFrame(drawLoop);
+  analyser.getByteFrequencyData(dataArray);
+  renderCore(dataArray);
+  renderMini(dataArray);
+}
+function drawIdleLoop(){
+  requestAnimationFrame(drawIdleLoop);
+  const fake = new Uint8Array(64);
+  const t = Date.now()/500;
+  for(let i=0;i<fake.length;i++) fake[i] = 6 + Math.sin(t+i*0.4)*4;
+  renderCore(fake);
+  renderMini(fake);
+}
+
+function renderCore(data){
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0,0,w,h);
+  const cx = w/2, cy = h/2;
+  const baseR = Math.min(w,h)*0.24;
+  const bars = 64;
+  const active = state.listening;
+  ctx.save();
+  ctx.translate(cx, cy);
+  for(let i=0;i<bars;i++){
+    const idx = Math.floor(i * (data.length/bars));
+    const v = data[idx]/255;
+    const len = active ? v * baseR * 0.9 : v * baseR * 0.35;
+    const angle = (i/bars) * Math.PI*2;
+    const x1 = Math.cos(angle)*baseR, y1 = Math.sin(angle)*baseR;
+    const x2 = Math.cos(angle)*(baseR+len), y2 = Math.sin(angle)*(baseR+len);
+    ctx.strokeStyle = active ? 'rgba(255,180,84,'+(0.35+v*0.5)+')' : 'rgba(62,232,255,'+(0.25+v*0.4)+')';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+function renderMini(data){
+  const w = miniCanvas.width, h = miniCanvas.height;
+  miniCtx.clearRect(0,0,w,h);
+  miniCtx.beginPath();
+  const step = w/data.length;
+  for(let i=0;i<data.length;i++){
+    const v = data[i]/255;
+    const x = i*step;
+    const y = h - v*h;
+    if (i===0) miniCtx.moveTo(x,y); else miniCtx.lineTo(x,y);
+  }
+  miniCtx.strokeStyle = state.listening ? '#ffb454' : '#3ee8ff';
+  miniCtx.lineWidth = 2;
+  miniCtx.shadowColor = state.listening ? '#ffb454' : '#3ee8ff';
+  miniCtx.shadowBlur = 6;
+  miniCtx.stroke();
+}
+
+/* ---------- Reasoning: local quick-commands + Claude fallback ---------- */
+const conversationHistory = [];
+const SYSTEM_PROMPT = `You are J.A.R.V.I.S., a poised, dryly witty AI assistant in the style of Tony Stark's system. `
+  + `Address the user as "Sir" or "Ma'am" occasionally but not every line. Keep replies concise (1-3 sentences) `
+  + `since they will be spoken aloud. Be helpful, precise, and slightly formal with understated wit.`;
+
+function tryLocalCommand(text){
+  const t = text.toLowerCase().trim();
+  if (/^(what('|)s| is) the time|current time/.test(t)){
+    return `It is ${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}, Sir.`;
+  }
+  if (/^(what('|)s| is) the date|today('|)s date|what day is it/.test(t)){
+    return `Today is ${new Date().toLocaleDateString('en-US',{weekday:'long', month:'long', day:'numeric', year:'numeric'})}.`;
+  }
+  if (/^(hello|hi|hey)( jarvis)?[.!]?$/.test(t)){
+    return `At your service, Sir. Systems are running within normal parameters.`;
+  }
+  if (/^(who are you|what are you)/.test(t)){
+    return `I am J.A.R.V.I.S. — Just A Rather Very Intelligent System — online and ready to assist.`;
+  }
+  if (/^(stop|cancel|never mind)$/.test(t)){
+    window.speechSynthesis.cancel();
+    return `Standing by.`;
+  }
+  return null;
+}
+
+async function askClaude(userText){
+  conversationHistory.push({ role:'user', content:userText });
+  const trimmed = conversationHistory.slice(-12);
+  try{
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        model:'claude-sonnet-4-6',
+        max_tokens:1000,
+        system: SYSTEM_PROMPT,
+        messages: trimmed
+      })
+    });
+    if (!response.ok){
+      const errText = await response.text().catch(()=> '');
+      showError('Reasoning core error (' + response.status + '): ' + errText.slice(0,200));
+      return `My apologies, Sir — the reasoning core returned an error. Check the alert banner for details.`;
+    }
+    const data = await response.json();
+    const textBlocks = (data.content || []).filter(b => b.type === 'text').map(b => b.text);
+    const reply = textBlocks.join('\n').trim() || "I'm afraid I couldn't process that, Sir.";
+    conversationHistory.push({ role:'assistant', content: reply });
+    return reply;
+  } catch(err){
+    showError('Could not reach the reasoning core: ' + (err && err.message ? err.message : err));
+    return `My apologies, Sir — I'm having trouble reaching the reasoning core right now.`;
+  }
+}
+
+async function handleUserInput(text){
+  if (!text || !text.trim()) return;
+  setMode('thinking');
+  const local = tryLocalCommand(text);
+  let reply;
+  if (local){
+    reply = local;
+  } else {
+    reply = await askClaude(text);
+  }
+  log('JARVIS', reply);
+  sessionNote('Response generated', 'OK', 'ok');
+  await speak(reply);
+}
+
+/* ---------- Text input wiring ---------- */
+function submitText(){
+  const val = els.textInput.value;
+  if (!val.trim()) return;
+  log('YOU', val);
+  els.textInput.value = '';
+  handleUserInput(val);
+}
+els.sendBtn.addEventListener('click', submitText);
+els.textInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitText(); });
+
+/* ---------- Boot sequence ----------
+   Gated behind a real user click. Browsers block getUserMedia (mic) and,
+   on most platforms, speechSynthesis.speak() from firing without a prior
+   user gesture — so everything audio-related starts here, not on page load. */
+setMode('idle');
+const bootOverlay = document.getElementById('bootOverlay');
+const bootBtn = document.getElementById('bootBtn');
+
+bootBtn.addEventListener('click', async () => {
+  bootBtn.disabled = true;
+  bootBtn.textContent = 'INITIALIZING...';
+
+  // "Unlock" speech synthesis with a silent utterance inside the gesture;
+  // some browsers require this before any later speak() call will work.
+  try{
+    if ('speechSynthesis' in window){
+      const unlock = new SpeechSynthesisUtterance('');
+      unlock.volume = 0;
+      window.speechSynthesis.speak(unlock);
+    }
+  } catch(e){ /* non-fatal */ }
+
+  bootOverlay.classList.add('hidden');
+
+  log('SYS', 'Boot sequence initiated...');
+  await initMic();
+  log('SYS', 'Neural core online.');
+  log('SYS', 'Audio subsystems calibrated.');
+
+  const greeting = 'Good day, Sir. All systems are online and ready for your command.';
+  log('JARVIS', greeting);
+  await speak(greeting);
+});
+</script>
+</body>
+</html>
