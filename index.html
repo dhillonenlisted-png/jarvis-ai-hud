@@ -433,6 +433,18 @@
     .console-wrap{ flex-direction:column; }
     .input-row{ width:100%; }
   }
+
+  /* ===== DEVICE-AWARE ADJUSTMENTS ===== */
+  body.device-mobile .mic-btn{ width:78px; height:78px; }
+  body.device-mobile .mic-btn svg{ width:32px; height:32px; }
+  body.device-tablet .mic-btn{ width:72px; height:72px; }
+  body.device-mobile .core-stage{ width:min(72vw, 300px); height:min(72vw, 300px); }
+  body.device-mobile .status-text{ font-size:12px; letter-spacing:3px; }
+  body.device-mobile .boot-note{ max-width:88vw; }
+  body.is-touch .volume-slider::-webkit-slider-thumb{ width:20px; height:20px; margin-top:-8px; }
+  body.is-touch .volume-slider::-moz-range-thumb{ width:20px; height:20px; }
+  body.is-touch .mute-btn{ width:40px; height:40px; }
+  body.device-mobile .console{ font-size:11px; }
 </style>
 </head>
 <body>
@@ -506,6 +518,8 @@
         <li><span>Speech Synthesis</span><span class="warn" id="s-tts">CHECKING</span></li>
         <li><span>Reasoning Engine</span><span class="ok">READY</span></li>
         <li><span>Microphone</span><span class="warn" id="s-mic">STANDBY</span></li>
+        <li><span>Device</span><span class="ok" id="s-device">DETECTING</span></li>
+        <li><span>Input Mode</span><span class="ok" id="s-input">DETECTING</span></li>
       </ul>
     </div>
 
@@ -598,9 +612,49 @@ function showError(msg){
   showError._t = setTimeout(()=> banner.classList.remove('show'), 7000);
 }
 
+/* ---------- Device detection & auto-adjustment ---------- */
+function detectDevice(){
+  const ua = navigator.userAgent || '';
+  const isTouch = (navigator.maxTouchPoints && navigator.maxTouchPoints > 1) || 'ontouchstart' in window;
+
+  let os = 'Unknown';
+  if (/iPhone|iPod/.test(ua)) os = 'iOS';
+  else if (/iPad/.test(ua) || (/Macintosh/.test(ua) && isTouch)) os = 'iPadOS';
+  else if (/Android/.test(ua)) os = 'Android';
+  else if (/Mac OS X/.test(ua)) os = 'macOS';
+  else if (/Windows/.test(ua)) os = 'Windows';
+  else if (/Linux/.test(ua)) os = 'Linux';
+
+  let browser = 'Unknown';
+  if (/Edg\//.test(ua)) browser = 'Edge';
+  else if (/OPR\//.test(ua)) browser = 'Opera';
+  else if (/CriOS\//.test(ua)) browser = 'Chrome';
+  else if (/Chrome\//.test(ua) && !/Edg\//.test(ua)) browser = 'Chrome';
+  else if (/FxiOS\//.test(ua) || /Firefox\//.test(ua)) browser = 'Firefox';
+  else if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) browser = 'Safari';
+
+  let type = 'Desktop';
+  if (/iPad/.test(ua) || (os === 'Android' && !/Mobile/.test(ua))) type = 'Tablet';
+  else if (/iPhone|iPod|Android.*Mobile|Mobi/.test(ua)) type = 'Mobile';
+  else if (isTouch && os === 'iPadOS') type = 'Tablet';
+
+  // Safari on iOS/iPadOS (incl. Chrome/Firefox-for-iOS, which are Safari-engine under the hood)
+  // does not implement the Web Speech recognition API at all.
+  const speechRecognitionLikelySupported = !(os === 'iOS' || os === 'iPadOS');
+
+  return { os, browser, type, isTouch, speechRecognitionLikelySupported };
+}
+const device = detectDevice();
+document.body.classList.add('device-' + device.type.toLowerCase());
+if (device.isTouch) document.body.classList.add('is-touch');
+
 if (location.protocol === 'file:'){
   const note = document.getElementById('bootNote');
   note.textContent = 'This page was opened as a local file. Microphone access is blocked outside a secure (https/localhost) context in most browsers — voice input will likely fail. Typed commands will still work. For full voice support, open this file through a local web server or host it online.';
+  note.classList.add('err');
+} else if (!device.speechRecognitionLikelySupported){
+  const note = document.getElementById('bootNote');
+  note.textContent = `Detected ${device.os} (${device.browser}) — this platform's browsers don't support the Web Speech recognition API, so voice INPUT won't work here. Voice OUTPUT (spoken replies) and typed commands will work normally.`;
   note.classList.add('err');
 }
 
@@ -625,7 +679,14 @@ const els = {
   muteBtn: document.getElementById('muteBtn'),
   volumeSlider: document.getElementById('volumeSlider'),
   volumeValue: document.getElementById('volumeValue'),
+  sDevice: document.getElementById('s-device'),
+  sInput: document.getElementById('s-input'),
 };
+
+/* ---------- Populate device readouts ---------- */
+els.sDevice.textContent = `${device.type.toUpperCase()} · ${device.os}`;
+els.sInput.textContent = device.isTouch ? 'TOUCH' : 'POINTER';
+sessionNote('Device detected', `${device.type} / ${device.os} / ${device.browser}`, 'ok');
 
 /* ---------- Clock ---------- */
 function tickClock(){
@@ -688,8 +749,14 @@ function loadVoices(){
   const voices = window.speechSynthesis.getVoices();
   if (voices.length){
     voicesReady = true;
-    chosenVoice = voices.find(v => /male|daniel|google uk english male|arthur/i.test(v.name))
-               || voices.find(v => /en-GB/i.test(v.lang))
+    // Prefer voices installed locally on this device (better quality, works offline)
+    // over remote/network voices, then match a male-leaning English voice if possible.
+    const localVoices = voices.filter(v => v.localService);
+    const pool = localVoices.length ? localVoices : voices;
+    chosenVoice = pool.find(v => /male|daniel|google uk english male|arthur/i.test(v.name))
+               || pool.find(v => /en-GB/i.test(v.lang))
+               || pool.find(v => /^en/i.test(v.lang))
+               || pool[0]
                || voices[0];
     els.sTTS.textContent = 'READY'; els.sTTS.className = 'ok';
   }
@@ -815,11 +882,14 @@ async function initMic(){
     return;
   }
   try{
-    micStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') await audioCtx.resume();
     analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 256;
+    // Lower resolution on phones/tablets to save CPU and battery.
+    analyser.fftSize = (device.type === 'Mobile' || device.type === 'Tablet') ? 128 : 256;
     dataArray = new Uint8Array(analyser.frequencyBinCount);
     micSource = audioCtx.createMediaStreamSource(micStream);
     micSource.connect(analyser);
@@ -860,7 +930,7 @@ function renderCore(data){
   ctx.clearRect(0,0,w,h);
   const cx = w/2, cy = h/2;
   const baseR = Math.min(w,h)*0.24;
-  const bars = 64;
+  const bars = (device.type === 'Mobile' || device.type === 'Tablet') ? 32 : 64;
   const active = state.listening;
   ctx.save();
   ctx.translate(cx, cy);
